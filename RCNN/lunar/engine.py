@@ -1,12 +1,9 @@
 import math
 import sys
-import time
 import torch
 
-import torchvision.models.detection.mask_rcnn
+import numpy as np
 
-from coco_utils import get_coco_api_from_dataset
-from coco_eval import CocoEvaluator
 import utils
 
 
@@ -54,56 +51,184 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
 
-def _get_iou_types(model):
-    model_without_ddp = model
-    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        model_without_ddp = model.module
-    iou_types = ["bbox"]
-    if isinstance(model_without_ddp, torchvision.models.detection.MaskRCNN):
-        iou_types.append("segm")
-    if isinstance(model_without_ddp, torchvision.models.detection.KeypointRCNN):
-        iou_types.append("keypoints")
-    return iou_types
+def intersection_over_union(gtBox, predBox):
+    xMax = max(gtBox[0], predBox[0])
+    yMax = max(gtBox[1], predBox[1])
+    xMin = min(gtBox[2], predBox[2])
+    yMin = min(gtBox[3], predBox[3])
+    # print('new box')
+    inter = [xMin, yMin, xMax, yMax]
+    interArea = abs((xMax - xMin) * (yMax - yMin))
+    # print(interArea)
+    gtArea = (gtBox[2] - gtBox[0]) * (gtBox[3] - gtBox[1])
+    # print(gtArea)
+    predArea = (predBox[2] - predBox[0]) * (predBox[3] - predBox[1])
+    # print(predArea)
+
+    iou = interArea / ((gtArea + predArea) - interArea)
+
+    return iou
 
 
-@torch.no_grad()
-def evaluate(model, data_loader, device):
-    n_threads = torch.get_num_threads()
-    # FIXME remove this and make paste_masks_in_image run on the GPU
-    torch.set_num_threads(1)
-    cpu_device = torch.device("cpu")
+def check_intersect(boxA, boxB):
+    if (boxA[2] < boxB[0]) or (boxA[3] < boxB[1]) or (boxB[2] < boxA[0]) or (boxB[3] < boxA[1]):
+        return False
+    else:
+        return True
+
+
+def seperate_boxes(predBoxes, gtBoxes):
+    noIntersect = []
+    intersectPredBoxes = []
+    for predBox in predBoxes:
+        intersect = False
+        for gtBox in gtBoxes:
+            if not check_intersect(predBox, gtBox):
+                continue
+            else:
+                intersectPredBoxes.append(predBox)
+                intersect = True
+                # print('break')
+                break
+        if intersect == False:
+            noIntersect.append(predBox)
+
+    return noIntersect, intersectPredBoxes
+
+
+def evaluate_single_best(gtBoxes, boxes_out):
+    best_scores = []
+    best_boxes = []
+    i = 0
+    for gtBox in gtBoxes:
+        best_iou = 0
+        best_box = []
+        for predBox in boxes_out:
+            if check_intersect(gtBox, predBox):
+                iou_tmp = intersection_over_union(gtBox, predBox)
+                if (iou_tmp > best_iou):
+                    best_iou = iou_tmp
+                    best_box = predBox
+        if best_iou != 0:
+            best_scores.append(best_iou)
+            best_boxes.append(best_box)
+        i += 1
+
+    return best_scores, best_boxes
+
+
+def evaluate_single(gtBoxes, predBoxes, threshold):
+    scores = []
+    # print(gtBoxes[0][0])
+    for predIdx in range(len(predBoxes)):
+        best_iou = [0, 0, 0]
+        for gtIdx in range(len(gtBoxes)):
+            if check_intersect(gtBoxes[gtIdx], predBoxes[predIdx]):
+                iou_tmp = intersection_over_union(gtBoxes[gtIdx], predBoxes[predIdx])
+                if (iou_tmp > best_iou[0]):
+                    best_iou = [iou_tmp, predIdx, gtIdx]
+        scores.append(best_iou)
+
+    if scores != []:
+
+        tp = 0
+        fp = 0
+        fn = 0
+        for score in scores:
+            if score[0] > threshold:
+                tp = tp + 1
+            else:
+                fp = fp + 1
+
+        for i in range(len(gtBoxes)):
+            # i = torch.tensor([i])
+
+            # for cpu use below
+            # if not isinstance(score[0],int):
+            #     score[0] = score[0].detach()
+
+            detect = False
+            for score in scores:
+                if score[2] >i:
+                    if score[0] > threshold:
+                        detect = True
+                        break
+            if detect == False:
+                fn = fn + 1
+
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+    # print ('precision: ' + str(precision))
+    # print('recall: ' + str(recall))
+
+        return precision, recall
+    return 0,0  
+
+
+# def evaluate(model, dataLoader, threshold,device):
+#     model.eval()
+#     precision = []
+#     recall = []
+#     print(len(dataLoader))
+#     i = 0
+#     for image, target in dataLoader:
+#         images = list(image.to(device) for image in images)
+#         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+#
+#         gtBoxes = target[0]['boxes'].numpy()
+#         # print(gtBoxes)
+#         predBoxes = model(image)
+#         predBoxes = predBoxes[0]['boxes'].detach().numpy()
+#         prec, recc = evaluate_single(gtBoxes, predBoxes, threshold)
+#         precision.append(prec)
+#         recall.append(recc)
+#         # print("precision: " + str(prec))
+#         # print("recall: " + str(recc)+"\n")
+#
+#         if i == 2:
+#             break;
+#         i = i+1
+#     meanPrec = np.mean(precision)
+#     meanRecc = np.mean(recall)
+#
+#     print("Mean precision: " + str(meanPrec))
+#     print("Mean recall: " + str(meanRecc))
+#
+#     return meanPrec, meanRecc
+
+def evaluate(model, dataLoader, threshold, device):
     model.eval()
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    header = 'Test:'
-
-    coco = get_coco_api_from_dataset(data_loader.dataset)
-    iou_types = _get_iou_types(model)
-    coco_evaluator = CocoEvaluator(coco, iou_types)
-
-    for image, targets in metric_logger.log_every(data_loader, 100, header):
-        image = list(img.to(device) for img in image)
+    precision = []
+    recall = []
+    print(len(dataLoader))
+    i = 0
+    for images, targets in dataLoader:
+        images = list(image.to(device) for image in images)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        # image.cuda()
+        # image = image[0].to(device=device)
+        # print(image)
+        # targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-        torch.cuda.synchronize()
-        model_time = time.time()
-        outputs = model(image)
+        gtBoxes = targets[0]['boxes']
+        # print(gtBoxes)
+        output = model(images)
+        # print(predBoxes)
+        predBoxes = output[0]['boxes']
+        # print(predBoxes)
+        prec, recc = evaluate_single(gtBoxes, predBoxes, threshold)
+        precision.append(prec)
+        recall.append(recc)
+        # print("precision: " + str(prec))
+        # print("recall: " + str(recc)+"\n")
 
-        outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
-        model_time = time.time() - model_time
+        if i == 2:
+            break;
+        i = i+1
+    meanPrec = np.mean(precision)
+    meanRecc = np.mean(recall)
 
-        res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
-        evaluator_time = time.time()
-        coco_evaluator.update(res)
-        evaluator_time = time.time() - evaluator_time
-        metric_logger.update(model_time=model_time, evaluator_time=evaluator_time)
+    print("Mean precision: " + str(meanPrec))
+    print("Mean recall: " + str(meanRecc))
 
-    # gather the stats from all processes
-    metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger)
-    coco_evaluator.synchronize_between_processes()
-
-    # accumulate predictions from all images
-    coco_evaluator.accumulate()
-    coco_evaluator.summarize()
-    torch.set_num_threads(n_threads)
-    return coco_evaluator
+    return meanPrec, meanRecc

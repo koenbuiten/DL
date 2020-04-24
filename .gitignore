@@ -1,4 +1,3 @@
-Links
-bnaic14_style/
-venv/
-.idea
+RCNN/lunar/models/
+RCNN/lunar/.idea
+RCNN/lunar/__pycache__

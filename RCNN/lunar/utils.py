@@ -328,16 +328,23 @@ def init_distributed_mode(args):
     setup_for_distributed(args.rank == 0)
 
 # made by Koen, not from Pytorch tut
-def show_image_box(img, boxes):
-    fig, ax = plt.subplots(1, figsize=(16, 9))
+def draw_image_boxes(boxes,ax,img):
+    # fig, ax = plt.subplots(1, figsize=(16, 9))
+    # print(len(boxes))
+    ax.axis('off')
     ax.imshow(img)
-    if (len(boxes) == 1) & (boxes[0][2] == 0):
-        print("there is no bounding box")
-    else:
-        for i in boxes:
-            # print(i)
-            rect = pat.Rectangle((i[0], i[1]), i[2] - i[0], i[3] - i[1], linewidth=1, edgecolor='r', facecolor='none')
-            ax.plot([i[0]], [i[3]], '-o')
-            ax.add_patch(rect)
+    for i in boxes:
+        # print(i)
+        rect = pat.Rectangle((i[0], i[1]), i[2] - i[0], i[3] - i[1], linewidth=1, edgecolor='r', facecolor='none')
+        ax.plot([i[0]], [i[1]], '-o')
+        ax.add_patch(rect)
 
-    plt.show()
+def convertTime(duration):
+    #convert time to hours:minutes:seconds:milliseconds
+    mins = duration // 60
+    secs = int(duration % 60)
+    ms = int(((duration%60)-secs)*1000)
+    hours = int(mins // 60)
+    mins = int(mins % 60)
+    duration = str(hours)+':'+str(mins)+':'+str(secs)+':'+str(ms)
+    return(duration)
