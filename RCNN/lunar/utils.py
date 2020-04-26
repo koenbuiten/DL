@@ -348,3 +348,9 @@ def convertTime(duration):
     mins = int(mins % 60)
     duration = str(hours)+':'+str(mins)+':'+str(secs)+':'+str(ms)
     return(duration)
+
+def draw_masks(masks,ax):
+    for mask in masks:
+        ax.plot(mask[1],mask[0])
+    return
+

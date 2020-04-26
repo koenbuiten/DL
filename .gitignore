@@ -1,3 +1,5 @@
 RCNN/lunar/models/
 RCNN/lunar/.idea
 RCNN/lunar/__pycache__
+RCNN/lunar/scratch.py
+RCNN/lunar/cudaTest.py

@@ -5,7 +5,7 @@ import torch
 import numpy as np
 
 import utils
-
+from skimage import measure
 
 def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
     model.train()
@@ -162,39 +162,7 @@ def evaluate_single(gtBoxes, predBoxes, threshold):
     # print('recall: ' + str(recall))
 
         return precision, recall
-    return 0,0  
-
-
-# def evaluate(model, dataLoader, threshold,device):
-#     model.eval()
-#     precision = []
-#     recall = []
-#     print(len(dataLoader))
-#     i = 0
-#     for image, target in dataLoader:
-#         images = list(image.to(device) for image in images)
-#         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-#
-#         gtBoxes = target[0]['boxes'].numpy()
-#         # print(gtBoxes)
-#         predBoxes = model(image)
-#         predBoxes = predBoxes[0]['boxes'].detach().numpy()
-#         prec, recc = evaluate_single(gtBoxes, predBoxes, threshold)
-#         precision.append(prec)
-#         recall.append(recc)
-#         # print("precision: " + str(prec))
-#         # print("recall: " + str(recc)+"\n")
-#
-#         if i == 2:
-#             break;
-#         i = i+1
-#     meanPrec = np.mean(precision)
-#     meanRecc = np.mean(recall)
-#
-#     print("Mean precision: " + str(meanPrec))
-#     print("Mean recall: " + str(meanRecc))
-#
-#     return meanPrec, meanRecc
+    return 0,0
 
 def evaluate(model, dataLoader, threshold, device):
     model.eval()
@@ -232,3 +200,45 @@ def evaluate(model, dataLoader, threshold, device):
     print("Mean recall: " + str(meanRecc))
 
     return meanPrec, meanRecc
+
+def label_objects(maskImg, idx):
+    # ground = (maskImg == [0,0,0]).all(-1)
+    # air = (maskImg == [255, 0, 0]).all(-1)
+    smallRocks = (maskImg == [0, 255, 0]).all(-1)
+    bigRocks = (maskImg == [0, 0, 255]).all(-1)
+
+    # objects = [ground,bigRocks, smallRocks,air]
+    objects = [bigRocks, smallRocks]
+    masks = []
+    labels = []
+    boxes = []
+
+    # objLabels 1,2 and 3, because 0 is for the air
+
+    for objClass in range(len(objects)):
+        objectsInClass = measure.label(objects[objClass])
+        objNums = len(np.unique(objectsInClass))
+        for objIdx in range(1,objNums):
+            # First object is everything else
+            object = np.where(objectsInClass == objIdx)
+            box = []
+
+            box.append(min(object[1]))
+            box.append(min(object[0]))
+            box.append(max(object[1]))
+            box.append(max(object[0]))
+
+            masks.append(object)
+            boxes.append(box)
+            labels.append(objClass+1)
+
+    # if len(boxes) == 0:
+    #     print('no boxes: ' + str(idx))
+        # masks = [[0,0]]
+        # boxes = [[0, 0, 0, 0]]
+        # labels = [0]
+
+    return masks, boxes, labels
+
+
+
