@@ -42,13 +42,17 @@ lunar_loc = '/media/koenbuiten/8675c03f-5bb1-4466-8581-8f042a79029b/koenbuiten/D
 def createName(name):
     while len(name) != 4:
         name = '0' + name
-    return name
+    return nameI
 
 
 # Create and save a new dataset with only 'useful' rocks.
+# Folder structure:
+# Parent: artificial-lunar-rocky-landscape-dataset
+# First children: images, real_moon_images, bounding_boxes.csv
+# images children: clean, clean2, ground, render, render2
 def create_only_rocks_dataset(data_loc):
     img_list = list(sorted(os.listdir(os.path.join(data_loc, "images/render"))))
-    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/clean2"))))
+    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/clean"))))
     imgs = []
     masks = []
 
