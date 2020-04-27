@@ -6,6 +6,7 @@ from PIL import Image
 
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
 import engine
 import transforms as T
@@ -48,7 +49,7 @@ def createName(name):
 # Create and save a new dataset with only 'useful' rocks.
 def create_only_rocks_dataset(data_loc):
     img_list = list(sorted(os.listdir(os.path.join(data_loc, "images/render"))))
-    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/clean2"))))
+    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/clean"))))
     imgs = []
     masks = []
 
@@ -97,13 +98,13 @@ class LunarDataset(object):
         masks, boxes, labels = engine.label_objects(imgMask, idx)
 
         # convert everything into a torch.Tensor
-
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         labels = torch.as_tensor(labels, dtype=torch.int64)
-        # masks = torch.as_tensor(masks, dtype=torch.uint8)
+        masks = torch.as_tensor(masks, dtype=torch.uint8)
         image_id = torch.tensor([idx])
 
-        target = {"boxes": boxes, "labels": labels, "image_id": image_id}
+        # print(masks)
+        target = {"boxes": boxes, "labels": labels, "image_id": image_id, "masks": masks}
 
         if self.transforms is not None:
             img, target = self.transforms(img, target)
@@ -125,6 +126,24 @@ def get_model_instance_segmentation(num_classes):
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     return model
 
+def get_mask_model_instance_segmentation(num_classes):
+    # load an instance segmentation model pre-trained pre-trained on COCO
+    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
+
+    # get number of input features for the classifier
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    # replace the pre-trained head with a new one
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
+    # now get the number of input features for the mask classifier
+    in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+    hidden_layer = 256
+    # and replace the mask predictor with a new one
+    model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask,
+                                                       hidden_layer,
+                                                       num_classes)
+
+    return model
 
 def get_transform(train):
     transforms = []
@@ -176,7 +195,7 @@ def detect_single_image(model, imgId):
 def main(evaluate):
     # train on the GPU or on the CPU, if a GPU is not available
     if torch.cuda.is_available():
-        device = torch.device('cuda')
+        device = torch.device('cpu')
     else:
         device = torch.device('cpu')
 
@@ -202,7 +221,8 @@ def main(evaluate):
         collate_fn=utils.collate_fn)
 
     # get the model using our helper function
-    model = get_model_instance_segmentation(num_classes)
+    # model = get_model_instance_segmentation(num_classes)
+    model = get_mask_model_instance_segmentation(num_classes)
 
     # move model to the right device
     model.to(device)
@@ -251,5 +271,27 @@ def main(evaluate):
 
     print("That's it!")
 
+def forward_step():
+    model = get_mask_model_instance_segmentation(3)
+    dataset = LunarDataset(lunar_loc, get_transform(train=True))
+    data_loader = torch.utils.data.DataLoader(
+        dataset, batch_size=2, shuffle=True, num_workers=4,
+        collate_fn=utils.collate_fn)
+    # For Training
+    images, targets = next(iter(data_loader))
+    images = list(image for image in images)
+    targets = [{k: v for k, v in t.items()} for t in targets]
+    output = model(images, targets)  # Returns losses and detections
+    print('Output: ')
+    print(output)
+    # For inference
+    model.eval()
+    x = [torch.rand(3, 300, 400), torch.rand(3, 500, 400)]
+    predictions = model(x)  # Returns predictions
+    print('Predictions: ')
+    print(predictions)
 
-main(False)
+forward_step()
+# main(False)
+# dataset = LunarDataset(lunar_loc, get_transform(train=True))
+# dataset.__getitem__(12)

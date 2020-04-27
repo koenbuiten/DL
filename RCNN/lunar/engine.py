@@ -1,11 +1,12 @@
 import math
 import sys
-import torch
 
 import numpy as np
 
 import utils
 from skimage import measure
+
+import matplotlib.pyplot as plt
 
 def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
     model.train()
@@ -218,17 +219,27 @@ def label_objects(maskImg, idx):
     for objClass in range(len(objects)):
         objectsInClass = measure.label(objects[objClass])
         objNums = len(np.unique(objectsInClass))
+
         for objIdx in range(1,objNums):
+            objectsInClass = measure.label(objects[objClass])
+
             # First object is everything else
             object = np.where(objectsInClass == objIdx)
+
             box = []
 
             box.append(min(object[1]))
             box.append(min(object[0]))
             box.append(max(object[1]))
             box.append(max(object[0]))
+            mask = objectsInClass
 
-            masks.append(object)
+
+            mask[mask == objIdx] = 1
+            mask[mask != objIdx] = 0
+
+            masks.append(mask)
+
             boxes.append(box)
             labels.append(objClass+1)
 
@@ -237,7 +248,6 @@ def label_objects(maskImg, idx):
         # masks = [[0,0]]
         # boxes = [[0, 0, 0, 0]]
         # labels = [0]
-
     return masks, boxes, labels
 
 
