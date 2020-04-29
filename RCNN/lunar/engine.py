@@ -126,9 +126,11 @@ def evaluate_single(gtBoxes, predBoxes, threshold):
         for gtIdx in range(len(gtBoxes)):
             if check_intersect(gtBoxes[gtIdx], predBoxes[predIdx]):
                 iou_tmp = intersection_over_union(gtBoxes[gtIdx], predBoxes[predIdx])
+                scores.append([iou_tmp, predBoxes, gtIdx])
                 if (iou_tmp > best_iou[0]):
                     best_iou = [iou_tmp, predIdx, gtIdx]
-        scores.append(best_iou)
+
+    predLen = len(predBoxes)
 
     if scores != []:
 
@@ -159,17 +161,28 @@ def evaluate_single(gtBoxes, predBoxes, threshold):
 
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
+        recall2 = tp / predLen
     # print ('precision: ' + str(precision))
     # print('recall: ' + str(recall))
 
-        return precision, recall
+        return precision, recall, recall2
     return 0,0
+
+def connected_components_boxes(boxes, boxIdx,connectedBoxes):
+    if boxIdx == len(boxes)-1:
+        return connectedBoxes
+    for boxJdx in range(boxIdx+1,len(boxes)):
+        if check_intersect(boxes[boxIdx],boxes[boxJdx]):
+            connectedBoxes.append(boxes[boxJdx])
+            connected_components_boxes(boxes, boxJdx,connectedBoxes)
+    return connectedBoxes
+
 
 def evaluate(model, dataLoader, threshold, device):
     model.eval()
     precision = []
     recall = []
-    print(len(dataLoader))
+    # print(len(dataLoader))
     i = 0
     for images, targets in dataLoader:
         images = list(image.to(device) for image in images)
@@ -207,6 +220,7 @@ def label_objects(maskImg, idx):
     # air = (maskImg == [255, 0, 0]).all(-1)
     smallRocks = (maskImg == [0, 255, 0]).all(-1)
     bigRocks = (maskImg == [0, 0, 255]).all(-1)
+    # print(bigRocks)
 
     # objects = [ground,bigRocks, smallRocks,air]
     objects = [bigRocks, smallRocks]
@@ -218,6 +232,7 @@ def label_objects(maskImg, idx):
 
     for objClass in range(len(objects)):
         objectsInClass = measure.label(objects[objClass])
+        # print(objectsInClass)
         objNums = len(np.unique(objectsInClass))
 
         for objIdx in range(1,objNums):
@@ -225,7 +240,7 @@ def label_objects(maskImg, idx):
 
             # First object is everything else
             object = np.where(objectsInClass == objIdx)
-
+            # print(object)
             box = []
 
             box.append(min(object[1]))

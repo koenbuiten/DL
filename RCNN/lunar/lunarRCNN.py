@@ -158,10 +158,12 @@ def get_transform(train):
 def detect_single_image(model, imgId):
     # Set model to evaluation mode
     model.eval()
-
+    device = torch.device('cuda')
     # Load in test dataset and get image and target(ground truth)
     dataset = LunarDataset(lunar_loc, get_transform(train=False))
     img, target = dataset.__getitem__(imgId-1)
+    img = img.to(device)
+    model.to(device)
     img = [img]
 
     # Put image into model
@@ -175,27 +177,28 @@ def detect_single_image(model, imgId):
     # from the ones which do intersect
     no_intersection, intersectionBoxes = engine.seperate_boxes(predBoxes, gt_boxes)
     best_scores, best_boxes = engine.evaluate_single_best(gt_boxes, intersectionBoxes)
-    precision, recall = engine.evaluate_single(gt_boxes, predBoxes, 0.5)
+    precision, recall, recall2 = engine.evaluate_single(gt_boxes, predBoxes, 0.5)
     print('Precision: ' + str(precision))
     print('Recall: ' + str(recall))
+    print('Recall2: ' + str(recall2))
 
     # Show image with ground truth boxes, predicted boxes and best boxes.
     imgId = createName(str(imgId))
     img_path = os.path.join(lunar_loc, "images/render2", 'render' + imgId + '.png')
     img = Image.open(img_path).convert('RGB')
 
-    fig, ax = plt.subplots()
-    fig2, ax2 = plt.subplots(1, 2, figsize=(16, 9))
+    # fig, ax = plt.subplots()
+    fig, ax = plt.subplots(1, 3, figsize=(16, 9))
     utils.draw_image_boxes(gt_boxes, ax[0], img)
-    utils.draw_image_boxes(intersectionBoxes, ax2[1], img)
-    utils.draw_image_boxes(best_boxes, ax2[2], img)
+    utils.draw_image_boxes(intersectionBoxes, ax[1], img)
+    utils.draw_image_boxes(best_boxes, ax[2], img)
 
     plt.show()
 
 def main(evaluate):
     # train on the GPU or on the CPU, if a GPU is not available
     if torch.cuda.is_available():
-        device = torch.device('cpu')
+        device = torch.device('cuda')
     else:
         device = torch.device('cpu')
 
@@ -263,7 +266,7 @@ def main(evaluate):
         duration = utils.convertTime(duration)
         print('time: ' + duration)
     # Save model and stats
-    torch.save(model, './models/modelAll_10.pt')
+    torch.save(model, './models/modelmasks_1.pt')
     stats = pd.DataFrame(stats)
     with open('stats.csv', 'w') as csv_file:
         stats.to_csv(path_or_buf=csv_file)
@@ -291,7 +294,11 @@ def forward_step():
     print('Predictions: ')
     print(predictions)
 
-forward_step()
-# main(False)
+# forward_step()
+main(False)
 # dataset = LunarDataset(lunar_loc, get_transform(train=True))
 # dataset.__getitem__(12)
+# model = torch.load(os.path.join(lunar_loc , "models/modelAllRocks_1.pt"))
+# detect_single_image(model,12)
+
+
