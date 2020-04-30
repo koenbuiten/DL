@@ -9,8 +9,10 @@ import cv2
 
 # Transforms multiple bounding boxes into a 2D array. Each bounding box corresponds to a row
 def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
+
+    
     batch_size = prediction.size(0)
-    stride =  inp_dim // prediction.size(2) # inp_dim = input image dimension
+    stride =  inp_dim // prediction.size(2)
     grid_size = inp_dim // stride
     bbox_attrs = 5 + num_classes
     num_anchors = len(anchors)
@@ -18,15 +20,14 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
     prediction = prediction.view(batch_size, bbox_attrs*num_anchors, grid_size*grid_size)
     prediction = prediction.transpose(1,2).contiguous()
     prediction = prediction.view(batch_size, grid_size*grid_size*num_anchors, bbox_attrs)
-
     anchors = [(a[0]/stride, a[1]/stride) for a in anchors]
 
-    # Sigmoid the  centre_X, centre_Y. and object confidencce
+    #Sigmoid the  centre_X, centre_Y. and object confidencce
     prediction[:,:,0] = torch.sigmoid(prediction[:,:,0])
     prediction[:,:,1] = torch.sigmoid(prediction[:,:,1])
     prediction[:,:,4] = torch.sigmoid(prediction[:,:,4])
-
-    # Add the center offsets
+    
+    #Add the center offsets
     grid = np.arange(grid_size)
     a,b = np.meshgrid(grid, grid)
 
@@ -49,9 +50,9 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
 
     anchors = anchors.repeat(grid_size*grid_size, 1).unsqueeze(0)
     prediction[:,:,2:4] = torch.exp(prediction[:,:,2:4])*anchors
-
+    
     prediction[:,:,5: 5 + num_classes] = torch.sigmoid((prediction[:,:, 5 : 5 + num_classes]))
 
     prediction[:,:,:4] *= stride
-
+    
     return prediction

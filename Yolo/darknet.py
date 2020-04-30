@@ -21,8 +21,8 @@ class Darknet(nn.Module):
         
         write = 0
         for i, module in enumerate(modules):        
-            module_type = (module["type"])
-            
+            module_type = (module["type"])        
+
             if module_type == "convolutional" or module_type == "upsample":
                 x = self.module_list[i](x)
     
@@ -183,8 +183,6 @@ def create_modules(layers_list):
         # Route layers
         elif (x["type"] == "route"):
 
-            
-
             x["layers"] = x["layers"].split(',')
             
             # Start  of a route
@@ -208,7 +206,7 @@ def create_modules(layers_list):
             module.add_module("route_{0}".format(index), route)
             
             if end < 0:
-                filters = output_filters[index + start] #+ output_filters[index + end]
+                filters = output_filters[index + start] + output_filters[index + end]
             else:
                 filters = output_filters[index + start]
                         
@@ -267,8 +265,8 @@ def create_modules(layers_list):
 def get_test_input():
     img = cv2.imread("Yolo/dog-cycle-car.png")
     img = cv2.resize(img, (416,416))          #Resize to the input dimension
-    img_ =  img[:,:,::-1].transpose((2,0,1))  # BGR -> RGB | H X W C -> C X H X W 
-    img_ = img_[np.newaxis,:,:,:]/255.0       #Add a channel at 0 (for batch) | Normalise
+    img_ = img[:,:,::-1].transpose((2,0,1))  # BGR -> RGB | H X W C -> C X H X W 
+    img_ = img_[np.newaxis,:,:,:]/255.0       #Add a channel at 0 (for batch) | Normalise    
     img_ = torch.from_numpy(img_).float()     #Convert to float
     img_ = Variable(img_)                     # Convert to Variable
     return img_
@@ -280,6 +278,12 @@ else:
 
 model = Darknet("Yolo/yolo.cfg")
 inp = get_test_input()
+
+
+print(inp.size())
+inp = inp.to(device)
+
 model.to(device)
+
 pred = model(inp, torch.cuda.is_available())
 print(pred)
