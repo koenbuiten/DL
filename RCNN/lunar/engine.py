@@ -1,14 +1,29 @@
 import math
+import os
 import sys
 
 import numpy as np
-
+import pandas as pd
 import utils
 from skimage import measure
 
-import matplotlib.pyplot as plt
 
-def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
+def losses_to_file(filename, dict,epoch):
+    for key in dict:
+        dict[key] = [dict[key].detach()]
+        
+        # dict[key] = [dict[key].cpu()]
+    # print(dict)
+    dict = pd.DataFrame(dict,index=[epoch])
+    headerVal = False
+
+    with open(filename, 'a') as csv_file:
+        if os.stat(filename).st_size == 0:
+            headerVal = True
+        dict.to_csv(path_or_buf=filename, mode='a',header= headerVal)
+
+    # print(dict)
+def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq, modelname):
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -47,9 +62,19 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
 
         if lr_scheduler is not None:
             lr_scheduler.step()
+        # stats.append(loss_dict_reduced)
+        loss_dict_reduced['loss'] = losses_reduced
+        # loss_dict_reduced.numpy()
 
-        metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
+
+        # print(loss_dict_reduced)
+        # print(losses_reduced)
+        metric_logger.update(**loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+        losses_to_file('./stats/loss_' + modelname + '.csv', loss_dict_reduced,epoch)
+
+        # print(stats)
+
 
 
 def intersection_over_union(gtBox, predBox):
@@ -97,77 +122,6 @@ def seperate_boxes(predBoxes, gtBoxes):
     return noIntersect, intersectPredBoxes
 
 
-def evaluate_single_best(gtBoxes, boxes_out):
-    best_scores = []
-    best_boxes = []
-    i = 0
-    for gtBox in gtBoxes:
-        best_iou = 0
-        best_box = []
-        for predBox in boxes_out:
-            if check_intersect(gtBox, predBox):
-                iou_tmp = intersection_over_union(gtBox, predBox)
-                if (iou_tmp > best_iou):
-                    best_iou = iou_tmp
-                    best_box = predBox
-        if best_iou != 0:
-            best_scores.append(best_iou)
-            best_boxes.append(best_box)
-        i += 1
-
-    return best_scores, best_boxes
-
-
-def evaluate_single(gtBoxes, predBoxes, threshold):
-    scores = []
-    # print(gtBoxes[0][0])
-    for predIdx in range(len(predBoxes)):
-        best_iou = [0, 0, 0]
-        for gtIdx in range(len(gtBoxes)):
-            if check_intersect(gtBoxes[gtIdx], predBoxes[predIdx]):
-                iou_tmp = intersection_over_union(gtBoxes[gtIdx], predBoxes[predIdx])
-                scores.append([iou_tmp, predBoxes, gtIdx])
-                if (iou_tmp > best_iou[0]):
-                    best_iou = [iou_tmp, predIdx, gtIdx]
-
-    predLen = len(predBoxes)
-
-    if scores != []:
-
-        tp = 0
-        fp = 0
-        fn = 0
-        for score in scores:
-            if score[0] > threshold:
-                tp = tp + 1
-            else:
-                fp = fp + 1
-
-        for i in range(len(gtBoxes)):
-            # i = torch.tensor([i])
-
-            # for cpu use below
-            # if not isinstance(score[0],int):
-            #     score[0] = score[0].detach()
-
-            detect = False
-            for score in scores:
-                if score[2] >i:
-                    if score[0] > threshold:
-                        detect = True
-                        break
-            if detect == False:
-                fn = fn + 1
-
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
-        recall2 = tp / predLen
-    # print ('precision: ' + str(precision))
-    # print('recall: ' + str(recall))
-
-        return precision, recall, recall2
-    return 0,0
-
 def connected_components_boxes(boxes, boxIdx,connectedBoxes):
     if boxIdx == len(boxes)-1:
         return connectedBoxes
@@ -178,49 +132,13 @@ def connected_components_boxes(boxes, boxIdx,connectedBoxes):
     return connectedBoxes
 
 
-def evaluate(model, dataLoader, threshold, device):
-    model.eval()
-    precision = []
-    recall = []
-    # print(len(dataLoader))
-    i = 0
-    for images, targets in dataLoader:
-        images = list(image.to(device) for image in images)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        # image.cuda()
-        # image = image[0].to(device=device)
-        # print(image)
-        # targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
-        gtBoxes = targets[0]['boxes']
-        # print(gtBoxes)
-        output = model(images)
-        # print(predBoxes)
-        predBoxes = output[0]['boxes']
-        # print(predBoxes)
-        prec, recc = evaluate_single(gtBoxes, predBoxes, threshold)
-        precision.append(prec)
-        recall.append(recc)
-        # print("precision: " + str(prec))
-        # print("recall: " + str(recc)+"\n")
-
-        if i == 2:
-            break;
-        i = i+1
-    meanPrec = np.mean(precision)
-    meanRecc = np.mean(recall)
-
-    print("Mean precision: " + str(meanPrec))
-    print("Mean recall: " + str(meanRecc))
-
-    return meanPrec, meanRecc
-
-def label_objects(maskImg, idx):
+def label_objects(maskImg):
     # ground = (maskImg == [0,0,0]).all(-1)
     # air = (maskImg == [255, 0, 0]).all(-1)
     smallRocks = (maskImg == [0, 255, 0]).all(-1)
     bigRocks = (maskImg == [0, 0, 255]).all(-1)
-    # print(bigRocks)
+
+
 
     # objects = [ground,bigRocks, smallRocks,air]
     objects = [bigRocks, smallRocks]
@@ -232,38 +150,49 @@ def label_objects(maskImg, idx):
 
     for objClass in range(len(objects)):
         objectsInClass = measure.label(objects[objClass])
+
         # print(objectsInClass)
         objNums = len(np.unique(objectsInClass))
-
         for objIdx in range(1,objNums):
-            objectsInClass = measure.label(objects[objClass])
-
-            # First object is everything else
             object = np.where(objectsInClass == objIdx)
-            # print(object)
+            mask = np.zeros((len(objectsInClass),len(objectsInClass[0])))
+            mask[object[0],object[1]] = 1
+
             box = []
 
             box.append(min(object[1]))
             box.append(min(object[0]))
             box.append(max(object[1]))
             box.append(max(object[0]))
-            mask = objectsInClass
-
-
-            mask[mask == objIdx] = 1
-            mask[mask != objIdx] = 0
 
             masks.append(mask)
 
             boxes.append(box)
             labels.append(objClass+1)
 
-    # if len(boxes) == 0:
-    #     print('no boxes: ' + str(idx))
-        # masks = [[0,0]]
-        # boxes = [[0, 0, 0, 0]]
-        # labels = [0]
     return masks, boxes, labels
+
+
+def get_intersection(maskA, maskB):
+    intersection = maskA + maskB
+    # print((intersection == 2).sum())
+    intersection[intersection != 2] = 0
+    intersection[intersection == 2] = 1
+
+
+    return intersection
+
+
+
+
+def iou_masks(maskA, maskB, intersection):
+    areaA = maskA.sum()
+    areaB = maskB.sum()
+    areaI = intersection.sum()
+
+    iou = areaI / ((areaA+areaB)-areaI)
+
+    return iou
 
 
 

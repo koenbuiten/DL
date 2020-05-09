@@ -1,20 +1,22 @@
 import os
-import numpy as np
-import torch
-import pandas as pd
-from PIL import Image
-
-import torchvision
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+import time
+import sys
 
 import engine
+import numpy as np
+import pandas as pd
+import torch
+from torch.optim.adagrad import Adagrad
+from torch.optim.adadelta import Adadelta
+from torch.optim.adam import Adam
+import torchvision
 import transforms as T
-
-import time
 import utils
+from PIL import Image
 from engine import train_one_epoch
-import matplotlib.pyplot as plt
+from evaluate import evaluate
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
 # --- Goal ----
 # Detecting rocks in images from the lunar moon lander.
@@ -33,10 +35,10 @@ import matplotlib.pyplot as plt
 
 
 # Koen's peregrine data location
-# lunar_loc = '/data/s3861023/lunarDataset'
+lunar_loc = '/data/s3861023/lunarDataset'
 
 # Koen's local data location
-lunar_loc = '/media/koenbuiten/8675c03f-5bb1-4466-8581-8f042a79029b/koenbuiten/Datasets/artificial-lunar-rocky-landscape-dataset'
+# lunar_loc = '/media/koenbuiten/8675c03f-5bb1-4466-8581-8f042a79029b/koenbuiten/Datasets/artificial-lunar-rocky-landscape-dataset'
 
 
 # Make sure image name has 4 integers
@@ -45,31 +47,6 @@ def createName(name):
         name = '0' + name
     return name
 
-
-# Create and save a new dataset with only 'useful' rocks.
-def create_only_rocks_dataset(data_loc):
-    img_list = list(sorted(os.listdir(os.path.join(data_loc, "images/render"))))
-    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/clean"))))
-    imgs = []
-    masks = []
-
-    jdx = 1
-    for idx in range(len(mask_list)):
-        mask_path = os.path.join(data_loc, "images/clean", mask_list[idx])
-        imgMask = Image.open(mask_path)
-        mask = np.array(imgMask)
-
-        if (True in ((mask == [0, 255, 0]).all(-1))) or (True in (mask == [0, 0, 255]).all(-1)):
-            imageName = createName(str(jdx))
-            imgMask.save(os.path.join(data_loc, "./images/clean2/clean" + imageName + ".png"))
-            masks.append(mask_list[idx])
-
-            img_path = os.path.join(data_loc, "images/render", img_list[idx])
-            image = Image.open(img_path)
-            image.save(os.path.join(data_loc, "images/render2/render" + imageName + ".png"))
-            imgs.append(img_list[idx])
-
-            jdx = jdx + 1
 
 # Loads in dataset
 class LunarDataset(object):
@@ -95,7 +72,12 @@ class LunarDataset(object):
         imgMask = np.array(imgMask)
 
         # Obtain masks, boxes and labels from the mask image
-        masks, boxes, labels = engine.label_objects(imgMask, idx)
+        masks, boxes, labels = engine.label_objects(imgMask)
+
+        # fig2, ax2 = plt.subplots()
+        # ax2.imshow(img)
+        # utils.draw_masks(masks, ax2)
+        # plt.show()
 
         # convert everything into a torch.Tensor
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
@@ -114,21 +96,13 @@ class LunarDataset(object):
     def __len__(self):
         return len(self.imgs)
 
+
 # get_model_instance segmentation and get_transform are fully copied from the tutorial:
 # https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html
-def get_model_instance_segmentation(num_classes):
-    # load an instance segmentation model pre-trained pre-trained on COCO
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
-
-    # get number of input features for the classifier
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    # replace the pre-trained head with a new one
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
-    return model
 
 def get_mask_model_instance_segmentation(num_classes):
     # load an instance segmentation model pre-trained pre-trained on COCO
-    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
+    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)
 
     # get number of input features for the classifier
     in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -145,6 +119,7 @@ def get_mask_model_instance_segmentation(num_classes):
 
     return model
 
+
 def get_transform(train):
     transforms = []
     transforms.append(T.ToTensor())
@@ -152,153 +127,161 @@ def get_transform(train):
         transforms.append(T.RandomHorizontalFlip(0.5))
     return T.Compose(transforms)
 
-# Function which put an image from the test set into model.
-# The output consist of the ground truth image, the boxes found by the model
-# and the best matching box(if any) for every ground truth box.
-def detect_single_image(model, imgId):
-    # Set model to evaluation mode
-    model.eval()
-    device = torch.device('cuda')
-    # Load in test dataset and get image and target(ground truth)
-    dataset = LunarDataset(lunar_loc, get_transform(train=False))
-    img, target = dataset.__getitem__(imgId-1)
-    img = img.to(device)
-    model.to(device)
-    img = [img]
 
-    # Put image into model
-    output = model(img)
+def get_optimizer(params, settings):
+    lrs = False
+    if settings['optimizer'] == 'SGD':
+        optimizer = torch.optim.SGD(params, lr=settings['lr'],
+                                    momentum=settings['momentum'],
+                                    weight_decay=settings['wd'])
+        lrs = True
+    elif settings['optimizer'] == 'Adagrad':
+        optimizer = Adagrad(params, lr=settings['lr'],
+                            lr_decay=0,
+                            weight_decay=settings['wd'],
+                            initial_accumulator_value=0,
+                            eps=1e-10)
+    elif settings['optimizer'] == 'Adadelta':
+        optimizer = Adadelta(params, lr=1.0,
+                             rho=0.9,
+                             eps=1e-06,
+                             weight_decay=settings['wd'])
+    elif settings['optimizer'] == 'Adam':
+        optimizer = Adam(params,lr=settings['lr'],
+                          betas=(0.9, 0.999),
+                          eps=1e-08,
+                          weight_decay=0,
+                          amsgrad=False)
+        lrs = True
+    else:
+        print('optimizer name invalid, using default SGD')
+        optimizer = torch.optim.SGD(params, 0.005,
+                                    momentum=0.9,
+                                    weight_decay=0.0005)
+    return optimizer, lrs
 
 
-    predBoxes = output[0]['boxes'].detach()
-    gt_boxes = target['boxes']
-
-    # Seperate the boxes which do not intersect with any of the ground truth boxes
-    # from the ones which do intersect
-    no_intersection, intersectionBoxes = engine.seperate_boxes(predBoxes, gt_boxes)
-    best_scores, best_boxes = engine.evaluate_single_best(gt_boxes, intersectionBoxes)
-    precision, recall, recall2 = engine.evaluate_single(gt_boxes, predBoxes, 0.5)
-    print('Precision: ' + str(precision))
-    print('Recall: ' + str(recall))
-    print('Recall2: ' + str(recall2))
-
-    # Show image with ground truth boxes, predicted boxes and best boxes.
-    imgId = createName(str(imgId))
-    img_path = os.path.join(lunar_loc, "images/render2", 'render' + imgId + '.png')
-    img = Image.open(img_path).convert('RGB')
-
-    # fig, ax = plt.subplots()
-    fig, ax = plt.subplots(1, 3, figsize=(16, 9))
-    utils.draw_image_boxes(gt_boxes, ax[0], img)
-    utils.draw_image_boxes(intersectionBoxes, ax[1], img)
-    utils.draw_image_boxes(best_boxes, ax[2], img)
-
-    plt.show()
-
-def main(evaluate):
+def main(ds):
     # train on the GPU or on the CPU, if a GPU is not available
     if torch.cuda.is_available():
         device = torch.device('cuda')
     else:
+        print("cuda not available")
+        sys.exit()
         device = torch.device('cpu')
 
+    # device = torch.device('cpu')
     # --------- Model/data initialization ---------
     # Select numer of classes: Big rock, small rocks and the rest
     num_classes = 3
     # Use dataset and defined transformations
-    dataset = LunarDataset(lunar_loc, get_transform(train=True))
-    dataset_test = LunarDataset(lunar_loc, get_transform(train=False))
+    if not ds:
+        dataset = LunarDataset(lunar_loc, get_transform(train=True))
+        dataset_test = LunarDataset(lunar_loc, get_transform(train=False))
+    
+        # split the dataset in train and test set
+        indices = torch.randperm(len(dataset)).tolist()
+        dataset = torch.utils.data.Subset(dataset, indices[:-50])
+        dataset_test = torch.utils.data.Subset(dataset_test, indices[-50:])
+    
+        # define training and validation data loaders
+        data_loader = torch.utils.data.DataLoader(
+            dataset, batch_size=2, shuffle=True, num_workers=4,
+            collate_fn=utils.collate_fn)
+    
+        data_loader_test = torch.utils.data.DataLoader(
+            dataset_test, batch_size=1, shuffle=False, num_workers=4,
+            collate_fn=utils.collate_fn)
+            
+        torch.save(data_loader, './dataLoaders/dataLoader_train2.pth')
+        torch.save(data_loader_test, './dataLoaders/dataLoader_test2.pth')
+    else:
+        data_loader = torch.load('./dataLoaders/dataLoader_train.pth')
+        data_loader_test = torch.load('./dataLoaders/dataLoader_test.pth')
+    
 
-    # split the dataset in train and test set
-    indices = torch.randperm(len(dataset)).tolist()
-    dataset = torch.utils.data.Subset(dataset, indices[:-50])
-    dataset_test = torch.utils.data.Subset(dataset_test, indices[-50:])
+    # get settings from the the command line argument
+    settings = utils.get_settings(sys.argv[1])
 
-    # define training and validation data loaders
-    data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=2, shuffle=True, num_workers=4,
-        collate_fn=utils.collate_fn)
-
-    data_loader_test = torch.utils.data.DataLoader(
-        dataset_test, batch_size=1, shuffle=False, num_workers=4,
-        collate_fn=utils.collate_fn)
-
-    # get the model using our helper function
-    # model = get_model_instance_segmentation(num_classes)
-    model = get_mask_model_instance_segmentation(num_classes)
-
+    seperator = '_'
+    # modelName = seperator.join([settings['optimizer'], str(settings['lr']), str(settings['momentum']), str(settings['wd'])])
+    modelName = sys.argv[1][0:len(sys.argv[1])-4]
+    modelsList = list(sorted(os.listdir("./models")))
+    print(modelName)
+    
+    if modelName + '.pt' in modelsList:
+        print(modelName)
+        statsFile = pd.read_csv("./stats/eval_" + modelName + '.csv')
+        epochs = statsFile.get('epoch')
+        epochs = np.max(epochs)+1
+        # epochs = 0
+        model = torch.load("./models/" + modelName + '.pt')
+    else:
+        epochs = 0
+        model = get_mask_model_instance_segmentation(num_classes)
     # move model to the right device
     model.to(device)
-
     # construct an optimizer
-    params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.SGD(params, lr=0.005,
-                                momentum=0.9, weight_decay=0.0005)
-    # and a learning rate scheduler
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                   step_size=3,
-                                                   gamma=0.1)
 
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer, lrs = get_optimizer(params, settings)
+
+    # and a learning rate scheduler
+    if lrs:
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                       step_size=3,
+                                                       gamma=0.1)
+    # get the model using our helper function
+    # evaluation = evaluate(model, data_loader_test, num_classes, nmsThreshold, device, 0)
+    # print(evaluation)
+    # return
     # ------------ Training ------------
     num_epochs = 1
     # Threshold for evalution with iou, an iou above the thresholds defines a good detection.
-    threshold = 0.5
-    stats = {'epoch': [], 'precision': [], 'recall': []}
-    for epoch in range(num_epochs):
+    nmsThreshold = 0.5
+    stats = []
+    print('ready for epochs')
+    for epoch in range(epochs, epochs + num_epochs):
         startT = time.time()
         print('start epoch ', epoch)
         # train for one epoch, printing every 50 iterations (batch training)
-        train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=50)
-        print('first training done')
+        train_one_epoch(model, optimizer, data_loader, device, epoch, 50, modelName)
+
         # update the learning rate
-        lr_scheduler.step()
+        if lrs:
+            lr_scheduler.step()
+
         # evaluate on the test dataset
         # I created the evaluation function myself to be more in controll.
         # Planning on comparing it with the coco evaluation from the tutorial
-        if evaluate:
-            evaluation = engine.evaluate(model, data_loader_test, threshold, device)
-            # create stats dict
-            stats['epoch'].append(epoch)
-            stats['precision'].append(evaluation[0])
-            stats['recall'].append(evaluation[1])
+        evaluation = evaluate(model, data_loader_test, num_classes, nmsThreshold, device, epoch)
+        evaluation = pd.DataFrame(evaluation)
+        if os.path.exists('./stats/eval_' + modelName + '.csv'):
+            with open('./stats/eval_' + modelName + '.csv', 'a') as csv_file:
+                evaluation.to_csv(path_or_buf=csv_file,header=False)
+        else:
+            with open('./stats/eval_' + modelName + '.csv', 'w') as csv_file:
+                evaluation.to_csv(path_or_buf=csv_file)
+        # create stats dict
+
         endT = time.time()
         duration = endT - startT
         duration = utils.convertTime(duration)
         print('time: ' + duration)
     # Save model and stats
-    torch.save(model, './models/modelmasks_1.pt')
-    stats = pd.DataFrame(stats)
-    with open('stats.csv', 'w') as csv_file:
-        stats.to_csv(path_or_buf=csv_file)
-    return eval
-
+    torch.save(model, './models/' + modelName + '.pt')
     print("That's it!")
 
-def forward_step():
-    model = get_mask_model_instance_segmentation(3)
-    dataset = LunarDataset(lunar_loc, get_transform(train=True))
-    data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=2, shuffle=True, num_workers=4,
-        collate_fn=utils.collate_fn)
-    # For Training
-    images, targets = next(iter(data_loader))
-    images = list(image for image in images)
-    targets = [{k: v for k, v in t.items()} for t in targets]
-    output = model(images, targets)  # Returns losses and detections
-    print('Output: ')
-    print(output)
-    # For inference
-    model.eval()
-    x = [torch.rand(3, 300, 400), torch.rand(3, 500, 400)]
-    predictions = model(x)  # Returns predictions
-    print('Predictions: ')
-    print(predictions)
+    return
+
 
 # forward_step()
-main(False)
-# dataset = LunarDataset(lunar_loc, get_transform(train=True))
-# dataset.__getitem__(12)
-# model = torch.load(os.path.join(lunar_loc , "models/modelAllRocks_1.pt"))
-# detect_single_image(model,12)
+# optimizers = ['Adagrad']
+# learning_rates = [0.005,0.01]
+# momentums = [0,0]
+# weight_decays = [0.00d05,0.001]
+# utils.save_all_settings(optimizers, learning_rates, momentums, weight_decays)
 
+# utils.make_settings_list()
+main(True)
 

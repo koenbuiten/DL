@@ -1,18 +1,26 @@
 from __future__ import print_function
 
-from collections import defaultdict, deque
+import pandas as pd
 import datetime
-import pickle
-import time
-
-import torch
-import torch.distributed as dist
-
 import errno
 import os
+import pickle
+import time
+from collections import defaultdict, deque
 
-import matplotlib.pyplot as plt
 import matplotlib.patches as pat
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.distributed as dist
+from PIL import Image
+
+
+# Make sure image name has 4 integers
+def createName(name):
+    while len(name) != 4:
+        name = '0' + name
+    return name
 
 
 class SmoothedValue(object):
@@ -339,6 +347,16 @@ def draw_image_boxes(boxes,ax,img):
         ax.plot([i[0]], [i[1]], '-o')
         ax.add_patch(rect)
 
+def draw_boxes(boxes,ax):
+    # fig, ax = plt.subplots(1, figsize=(16, 9))
+    # print(len(boxes))
+    ax.axis('off')
+    for i in boxes:
+        # print(i)
+        rect = pat.Rectangle((i[0], i[1]), i[2] - i[0], i[3] - i[1], linewidth=1, edgecolor='r', facecolor='none')
+        ax.plot([i[0]], [i[1]], '-o')
+        ax.add_patch(rect)
+
 def convertTime(duration):
     #convert time to hours:minutes:seconds:milliseconds
     mins = duration // 60
@@ -350,7 +368,146 @@ def convertTime(duration):
     return(duration)
 
 def draw_masks(masks,ax):
+    # print(len(masks))
+    # zerosMasks = mask[mask ==
+    # print(len(masks))
+    # print(masks)
+    # plt.imshow(masks[0][0])
+
     for mask in masks:
-        ax.plot(mask[1],mask[0])
+        # print(len(mask))
+        if len(mask) == 1:
+            maskPos = np.where(mask[0] == 1)
+        else:
+            maskPos = np.where(mask == 1)
+        # print(len(np.unique(mask)))
+        # print(maskPos)
+        ax.plot(maskPos[1], maskPos[0])
     return
 
+def create_only_rocks_dataset(data_loc):
+    img_list = list(sorted(os.listdir(os.path.join(data_loc, "images/render"))))
+    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/clean"))))
+    imgs = []
+    masks = []
+
+    jdx = 1
+    for idx in range(len(mask_list)):
+        mask_path = os.path.join(data_loc, "images/clean", mask_list[idx])
+        imgMask = Image.open(mask_path)
+        mask = np.array(imgMask)
+
+        if (True in ((mask == [0, 255, 0]).all(-1))) or (True in (mask == [0, 0, 255]).all(-1)):
+            imageName = createName(str(jdx))
+            imgMask.save(os.path.join(data_loc, "./images/clean2/clean" + imageName + ".png"))
+            masks.append(mask_list[idx])
+
+            img_path = os.path.join(data_loc, "images/render", img_list[idx])
+            image = Image.open(img_path)
+            image.save(os.path.join(data_loc, "images/render2/render" + imageName + ".png"))
+            imgs.append(img_list[idx])
+
+            jdx = jdx + 1
+
+# Function which put an image from the test set into model.
+# The output consist of the ground truth image, the boxes found by the model
+# and the best matching box(if any) for every ground truth box.
+def detect_single_image(model, imgId):
+    # Set model to evaluation mode
+    model.eval()
+    device = torch.device('cpu')
+    # Load in test dataset and get image and target(ground truth)
+    dataset = LunarDataset(lunar_loc, get_transform(train=False))
+    img, target = dataset.__getitem__(imgId-1)
+    img = img.to(device)
+    model.to(device)
+    img = [img]
+
+    # Put image into model
+    output = model(img)
+
+
+    predBoxes = output[0]['boxes'].detach()
+    # print(output)
+    predMasks = output[0]['masks'].detach()
+    gtBoxes = target['boxes']
+    gtMasks = target['masks']
+    # print('gtMasks')
+    # print(gtMasks)
+    # print('predmasks')
+    # print(predMasks[0,:][0])
+
+    # print(predMasks)
+
+
+
+    # Seperate the boxes which do not intersect with any of the ground truth boxes
+    # from the ones which do intersect
+    # no_intersection, intersectionBoxes = engine.seperate_boxes(predBoxes, gtBoxes)
+    # best_scores, best_boxes = engine.evaluate_single_best(gtBoxes, intersectionBoxes)
+    # precision, recall, recall2 = engine.evaluate_single(gtBoxes, predBoxes, 0.5)
+    # maskPrecision, maskRecall = engine.evaluate_single_mask(gtMasks,predMasks,0.5)
+    # print('Precision: ' + str(precision))
+    # print('Recall: ' + str(recall))
+    # print('Mask precision: ' + str(maskPrecision))
+    # print('Mask recall: ' + str(maskRecall))
+    # print('Recall2: ' + str(recall2))
+
+    # Show image with ground truth boxes, predicted boxes and best boxes.
+    imgId = createName(str(imgId))
+    img_path = os.path.join(lunar_loc, "images/render2", 'render' + imgId + '.png')
+    img = Image.open(img_path).convert('RGB')
+
+    fig, ax = plt.subplots()
+    ax.imshow(img)
+    utils.draw_masks(gtMasks, ax)
+
+    fig2, ax2 = plt.subplots()
+    ax2.imshow(img)
+    utils.draw_masks(predMasks, ax2)
+    plt.show()
+
+
+
+    # utils.draw_masks(predMasks, ax2)
+    #
+    # fig, ax = plt.subplots(1, 2, figsize=(16, 9))
+    # utils.draw_image_boxes(gtBoxes, ax[0], img)
+    # utils.draw_image_boxes(predBoxes, ax[1], img)
+    # utils.draw_image_boxes(best_boxes, ax[2], img)
+    # plt.savefig("plots/masksPlot1.png")
+    plt.show()
+
+def save_setting_to_file(settings):
+    seperator = '_'
+    modelName = seperator.join([settings['optimizer'], str(settings['lr'][0]), str(settings['momentum'][0]), str(settings['wd'][0])])
+    settings = pd.DataFrame(settings)
+    file = './settings/' + modelName + '.txt'
+
+    with open(file, 'w') as csv_file:
+        settings.to_csv(path_or_buf=file)
+
+def save_all_settings(optimizers, learning_rates, momentums, weight_decays):
+    # fileid = 1
+    # settingsList = list(sorted(os.listdir("./settings")))
+    # fileid = len(settingsList)+1
+    for optimizer in optimizers:
+        for lr in learning_rates:
+            for momentum in momentums:
+                for wd in weight_decays:
+                    settings = {'optimizer': optimizer, "lr": [lr], "momentum": [momentum], "wd":[wd]}
+                    save_setting_to_file(settings)
+                    # fileid = fileid + 1
+
+def get_settings(file_id):
+    settings = pd.read_csv('./settings/'+file_id)
+    settings = settings.to_dict('records')[0]
+    del settings['Unnamed: 0']
+    return settings
+
+def make_settings_list():
+    file = open('./settings/settingsList.in', "w")
+    settingsList = list(sorted(os.listdir("./settings")))
+    for settings in settingsList:
+        if settings != 'settingsList.in':
+            file.write(settings+'\n')
