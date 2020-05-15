@@ -184,8 +184,11 @@ def main(ds):
         torch.save(data_loader, './dataLoaders/dataLoader_train2.pth')
         torch.save(data_loader_test, './dataLoaders/dataLoader_test2.pth')
     else:
-        data_loader = torch.load('./dataLoaders/dataLoader_train2.pth')
-        data_loader_test = torch.load('./dataLoaders/dataLoader_test2.pth')
+        if os.path.exists('dataLoaders'):
+            data_loader = torch.load('./dataLoaders/dataLoader_train2.pth')
+            data_loader_test = torch.load('./dataLoaders/dataLoader_test2.pth')
+        else:
+            os.mkdir('dataLoaders')
 
     # get settings from the the command line argument
     settings = utils.get_settings(sys.argv[1])
@@ -257,5 +260,5 @@ def main(ds):
 
     return
 
-main(True)
+main(False)
 
