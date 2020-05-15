@@ -1,6 +1,6 @@
 Readme file for the DL project: Rock detection for the Lunar Surface
 
-running the programm: python lunarRCNN SGD_0.01_0.9_0.0001.txt (The text refers to certain settings used for the model, the settings folder contains several settings files for reference)
+running the programm: python lunarRCNN SGD_0.01_0.9_0.0001.txt (The text refers to certain settings used for the model, the settings folder contains several settings files for reference). The dataLoader folder should be made to be able to run the code.
 
 There are 7 files:
 - lunarRCNN.py is the main file, this file should be run with a name of a settings file like: "python 		lunarRCNN SGD_0.01_0.9_0.0001.txt". The settings folder contains several settings files for reference. The program is constructed this way to be able to run batch jobs on the peregrine hpc from the rug. The program save the model in the models folder, the evalation and loss statistics in the stats folder.
