@@ -72,18 +72,12 @@ def label_objects(maskImg):
     # Red pixels are air, green pixels are small rocks and blue pixels are big rock
     bigRocks = maskImg[:, :, 2]
     smallRocks = maskImg[:,:,1]
-    air = maskImg[:,:,0]
 
     masks = []
     labels = []
     boxes = []
 
     # For every object class, make the pixel 1 if it is the class color, otherwise make it 0
-    h, w = air.shape
-    for y in range(0, h):
-        for x in range(0, w):
-            air[y, x] = 1 if air[y, x] != 0 else 0
-
     h, w = smallRocks.shape
     for y in range(0, h):
         for x in range(0, w):
@@ -94,7 +88,8 @@ def label_objects(maskImg):
         for x in range(0, w):
             bigRocks[y, x] = 1 if bigRocks[y, x] != 0 else 0
 
-    # Code from the above mentioned kernel which remove small rocks in big rocks
+    # Code from the above mentioned kernel which remove small rocks in big rocks.
+    # This is redundent when using the clean version of the dataset.
     kernel = np.ones((15, 15), np.uint8)
     kernel_circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
     smallRocks = cv2.morphologyEx(smallRocks, cv2.MORPH_OPEN, kernel_circle)

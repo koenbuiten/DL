@@ -224,7 +224,7 @@ def calculate_ap(scores, ious, method, gts):
         print('not a valid method')
         return 0
 
-    return ap,ar
+    return ap
 
 # loops over the images from the test dataset and calculates the ap and ar for the masks and box method seperatly
 def evaluate(model, dataLoader, numclasses, nmsThreshold, device, epoch):
@@ -282,8 +282,7 @@ def evaluate(model, dataLoader, numclasses, nmsThreshold, device, epoch):
             maskStats[label - 1]['scores'].extend(maskScores)
 
     eval = {'epoch': [], 'boundary': [], 'class': [],
-            'AP{.50:.95:.05}': [], 'AP{.50}': [], 'AP{.75}': [],
-            'AR{.50:.95:.05}': [], 'AR{.50}': [], 'AR{.75}': []}
+            'AP{.50:.95:.05}': [], 'AP{.50}': [], 'AP{.75}': []}
     methods = ['AP{.50:.95:.05}', 'AP{.50}', 'AP{.75}']
     for labelIdx in range(numclasses - 1):
         eval['epoch'].append(epoch)
@@ -293,14 +292,9 @@ def evaluate(model, dataLoader, numclasses, nmsThreshold, device, epoch):
         eval['boundary'].append('mask')
         eval['class'].append(labelIdx + 1)
         for method in methods:
-            apBox, arBox = calculate_ap(boxStats[labelIdx]['scores'], boxStats[labelIdx]['ious'], method, gtCount)
-            apMask, arMask = calculate_ap(maskStats[labelIdx]['scores'], maskStats[labelIdx]['ious'], method, gtCount)
+            apBox  = calculate_ap(boxStats[labelIdx]['scores'], boxStats[labelIdx]['ious'], method, gtCount)
+            apMask = calculate_ap(maskStats[labelIdx]['scores'], maskStats[labelIdx]['ious'], method, gtCount)
             eval[method].append(apBox)
             eval[method].append(apMask)
-            method= list(method)
-            method[1] = 'R'
-            method = "".join(method)
-            eval[method].append(arBox)
-            eval[method].append(arMask)
 
     return eval

@@ -159,8 +159,8 @@ def main(ds):
         device = torch.device('cpu')
 
     # --------- Model/data initialization ---------
-    # Select numer of classes: Big rock, small rocks and the rest
-    num_classes = 4
+    # Select numer of classes: Big rocks, small rocks and the rest
+    num_classes = 3
     # If ds is True, use an exisiting dataloader, otherwise make a new one.
     if not ds:
         print('creating dataLoader')
