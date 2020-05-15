@@ -10,4 +10,10 @@
 # To make the program run
 Change the **lunar_loc** variable to the folder that contains the dataset.
 
+# To make the clean2 and render2 folders with the new clean dataset with only rocks
+Open you python environment: python or python3 (in most cases)
+import utils
+then run utils.create_only_rocks_dataset(lunar_loc) where lunar_loc is the path to the artificial-lunar-rocky-landscape-dataset folder.
+example: utils.create_only_rocks_dataset('home/DL/Datasets/artificial-lunar-rocky-landscape-dataset')
+
 

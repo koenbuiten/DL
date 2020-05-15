@@ -94,7 +94,7 @@ def label_objects(maskImg):
     kernel_circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
     smallRocks = cv2.morphologyEx(smallRocks, cv2.MORPH_OPEN, kernel_circle)
 
-    objects = [bigRocks, smallRocks, air]
+    objects = [bigRocks, smallRocks]
 
     # Loop over the 3 object classes retrieve objects in a class with measure.label
     # Measure.label creates connected components and give all the pixels in a connected components a different integer

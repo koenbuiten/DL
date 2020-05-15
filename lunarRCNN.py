@@ -197,7 +197,11 @@ def main(ds):
 
     # Extract the model name
     modelName = sys.argv[1][0:len(sys.argv[1])-4]
-    modelsList = list(sorted(os.listdir("./models")))
+    if os.path.exists('models'):
+        modelsList = list(sorted(os.listdir("./models")))
+    else:
+        os.mkdir('models')
+        modelsList = []
     print(modelName)
 
     # If the model already exist, load the model so further training can be done.
