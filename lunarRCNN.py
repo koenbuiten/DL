@@ -163,6 +163,8 @@ def main(ds):
     num_classes = 3
     # If ds is True, use an exisiting dataloader, otherwise make a new one.
     if not ds:
+        if not os.path.exists('dataLoaders'):
+            os.mkdir('dataLoaders')
         print('creating dataLoader')
         dataset = LunarDataset(lunar_loc, get_transform(train=True))
         dataset_test = LunarDataset(lunar_loc, get_transform(train=False))
