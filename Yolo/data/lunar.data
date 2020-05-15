@@ -1,5 +1,5 @@
 classes = 1
 train  = Yolo/data/train.txt  
 valid  = Yolo/data/val.txt  
-names = lunar.names  
+names = Yolo/data/lunar.names  
 backup = backup/

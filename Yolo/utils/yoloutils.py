@@ -193,12 +193,6 @@ def bbox_iou(box1, box2):
     
     return iou
 
-#Reads the file with the classes name
-def load_classes(namesfile):
-    fp = open(namesfile, "r")
-    names = fp.read().split("\n")[:-1]
-    return names
-
 def prep_image(img, inp_dim):
     """
     Prepare image for inputting to the neural network. 

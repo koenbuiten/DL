@@ -5,19 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F 
 from torch.autograd import Variable
 import numpy as np
-from yoloutils import * 
+from utils.yoloutils import * 
 
-# Please
-
-def get_test_input():
-    img = cv2.imread("dog-cycle-car.png")
-    img = cv2.resize(img, (416,416))          #Resize to the input dimension
-    img_ =  img[:,:,::-1].transpose((2,0,1))  # BGR -> RGB | H X W C -> C X H X W 
-    img_ = img_[np.newaxis,:,:,:]/255.0       #Add a channel at 0 (for batch) | Normalise
-    img_ = torch.from_numpy(img_).float()     #Convert to float
-    img_ = Variable(img_)                     # Convert to Variable
-    return img_
-
+#CFG parsing
+#Utilized for reading the model config file in which the network is implemented
 def parse_cfg(cfgfile):
     """
     Takes a configuration file
@@ -28,28 +19,28 @@ def parse_cfg(cfgfile):
     """
     
     file = open(cfgfile, 'r')
-    lines = file.read().split('\n')                        # store the lines in a list
-    lines = [x for x in lines if len(x) > 0]               # get read of the empty lines 
-    lines = [x for x in lines if x[0] != '#']              # get rid of comments
-    lines = [x.rstrip().lstrip() for x in lines]           # get rid of fringe whitespaces
+    lines_array = file.read().split('\n')                        # store the lines in a list
+    lines_array = [x for x in lines_array if len(x) > 0]               # get read of the empty lines 
+    lines_array = [x for x in lines_array if x[0] != '#']              # get rid of comments
+    lines_array = [x.rstrip().lstrip() for x in lines_array]           # get rid of fringe whitespaces
     
     block = {}
     blocks = []
     
-    for line in lines:
-        if line[0] == "[":               # This marks the start of a new block
+    for readline in lines_array:
+        if readline[0] == "[":               # This marks the start of a new block
             if len(block) != 0:          # If block is not empty, implies it is storing values of previous block.
                 blocks.append(block)     # add it the blocks list
                 block = {}               # re-init the block
-            block["type"] = line[1:-1].rstrip()     
+            block["type"] = readline[1:-1].rstrip()     
         else:
-            key,value = line.split("=") 
+            key,value = readline.split("=") 
             block[key.rstrip()] = value.lstrip()
     blocks.append(block)
     
     return blocks
 
-
+#Implementation of empty layer. Utilized for shortcut layers that just use the forward pass 
 class EmptyLayer(nn.Module):
     def __init__(self):
         super(EmptyLayer, self).__init__()
@@ -61,6 +52,10 @@ class DetectionLayer(nn.Module):
         self.anchors = anchors
 
 
+# Creates the pytorch modules. i.e. the layers
+# Afterwards appends it to the module list
+# returns the net info and the module list
+# NOTE: the first entry of the .cfg file is the net info 
 
 def create_modules(blocks):
     net_info = blocks[0]     #Captures the information about the input and pre-processing    
@@ -70,11 +65,7 @@ def create_modules(blocks):
     
     for index, x in enumerate(blocks[1:]):
         module = nn.Sequential()
-    
-        #check the type of block
-        #create a new module for the block
-        #append to module_list
-        
+     
         #If it's a convolutional layer
         if (x["type"] == "convolutional"):
             #Get the info about the layer
@@ -111,14 +102,12 @@ def create_modules(blocks):
                 activn = nn.LeakyReLU(0.1, inplace = True)
                 module.add_module("leaky_{0}".format(index), activn)
         
-            #If it's an upsampling layer
             #We use Bilinear2dUpsampling
         elif (x["type"] == "upsample"):
             stride = int(x["stride"])
             upsample = nn.Upsample(scale_factor = 2, mode = "nearest")
             module.add_module("upsample_{}".format(index), upsample)
-                
-        #If it is a route layer
+                     
         elif (x["type"] == "route"):
             x["layers"] = x["layers"].split(',')
             #Start  of a route
@@ -145,7 +134,7 @@ def create_modules(blocks):
             shortcut = EmptyLayer()
             module.add_module("shortcut_{}".format(index), shortcut)
             
-        #Yolo is the detection layer
+
         elif x["type"] == "yolo":
             mask = x["mask"].split(",")
             mask = [int(x) for x in mask]
@@ -164,6 +153,7 @@ def create_modules(blocks):
         
     return (net_info, module_list)
 
+#Yolo is based on DarkNet
 class Darknet(nn.Module):
     def __init__(self, cfgfile):
         super(Darknet, self).__init__()
@@ -227,15 +217,11 @@ class Darknet(nn.Module):
         return detections
 
 
+# Loads the pre-trained values from a weight file in YOLO format
     def load_weights(self, weightfile):
         #Open the weights file
         fp = open(weightfile, "rb")
     
-        #The first 5 values are header information 
-        # 1. Major version number
-        # 2. Minor Version Number
-        # 3. Subversion number 
-        # 4,5. Images seen by the network (during training)
         header = np.fromfile(fp, dtype = np.int32, count = 5)
         self.header = torch.from_numpy(header)
         self.seen = self.header[3]   

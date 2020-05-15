@@ -1,15 +1,9 @@
 from __future__ import division
 
 from darknet import *
-from yoloutils import*
-from datasets import *
-#from utils.logger import *
-#from utils.utils import *
-
-#from utils.parse_config import *
-#from test import evaluate
-
-#from terminaltables import AsciiTable
+from utils.yoloutils import*
+from utils.datasets import *
+from utils.utils import*
 
 import os
 import sys
@@ -24,13 +18,16 @@ from torchvision import transforms
 from torch.autograd import Variable
 import torch.optim as optim
 
+
+# Config parsing
+# WATCH FOR THE model_def and data_config PATHS
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--batch_size", type=int, default=8, help="size of each image batch")
     parser.add_argument("--gradient_accumulations", type=int, default=2, help="number of gradient accums before step")
-    parser.add_argument("--model_def", type=str, default="config/yolov3.cfg", help="path to model definition file")
-    parser.add_argument("--data_config", type=str, default="data/lunar.data", help="path to data config file")
+    parser.add_argument("--model_def", type=str, default="Yolo/yolo.cfg", help="path to model definition file")
+    parser.add_argument("--data_config", type=str, default="Yolo/data/lunar.data", help="path to data config file")
     parser.add_argument("--pretrained_weights", type=str, help="if specified starts from checkpoint model")
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
@@ -66,14 +63,13 @@ if __name__ == "__main__":
             model.load_darknet_weights(opt.pretrained_weights)
 
     # Get dataloader
-    dataset = ListDataset(train_path, augment=True, multiscale=opt.multiscale_training)
+    dataset =  ListDataset(train_path)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=opt.batch_size,
         shuffle=True,
         num_workers=opt.n_cpu,
-        pin_memory=True,
-        collate_fn=dataset.collate_fn,
+        pin_memory=True
     )
 
     optimizer = torch.optim.Adam(model.parameters())
