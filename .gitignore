@@ -6,3 +6,5 @@ RCNN/lunar/cudaTest.py
 
 
 Yolo/yolov3.weights
+Yolo/data/labels
+Yolo/data/images

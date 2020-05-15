@@ -7,6 +7,8 @@ from torch.autograd import Variable
 import numpy as np
 import cv2 
 
+import tensorflow as tf
+
 # Transforms multiple bounding boxes into a 2D array. Each bounding box corresponds to a row
 def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
 
@@ -208,3 +210,67 @@ def prep_image(img, inp_dim):
     img = img[:,:,::-1].transpose((2,0,1)).copy()
     img = torch.from_numpy(img).float().div(255.0).unsqueeze(0)
     return img
+
+def parse_model_config(path):
+    """Parses the yolo-v3 layer configuration file and returns module definitions"""
+    file = open(path, 'r')
+    lines = file.read().split('\n')
+    lines = [x for x in lines if x and not x.startswith('#')]
+    lines = [x.rstrip().lstrip() for x in lines] # get rid of fringe whitespaces
+    module_defs = []
+    for line in lines:
+        if line.startswith('['): # This marks the start of a new block
+            module_defs.append({})
+            module_defs[-1]['type'] = line[1:-1].rstrip()
+            if module_defs[-1]['type'] == 'convolutional':
+                module_defs[-1]['batch_normalize'] = 0
+        else:
+            key, value = line.split("=")
+            value = value.strip()
+            module_defs[-1][key.rstrip()] = value.strip()
+
+    return module_defs
+
+def parse_data_config(path):
+    """Parses the data configuration file"""
+    options = dict()
+    options['gpus'] = '0,1,2,3'
+    options['num_workers'] = '10'
+    with open(path, 'r') as fp:
+        lines = fp.readlines()
+    for line in lines:
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+        key, value = line.split('=')
+        options[key.strip()] = value.strip()
+    return options
+
+
+def weights_init_normal(m):
+    classname = m.__class__.__name__
+    if classname.find("Conv") != -1:
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find("BatchNorm2d") != -1:
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+        torch.nn.init.constant_(m.bias.data, 0.0)
+
+def horisontal_flip(images, targets):
+    images = torch.flip(images, [-1])
+    targets[:, 2] = 1 - targets[:, 2]
+    return images, targets
+
+class Logger(object):
+    def __init__(self, log_dir):
+        """Create a summary writer logging to log_dir."""
+        self.writer = tf.summary.FileWriter(log_dir)
+
+    def scalar_summary(self, tag, value, step):
+        """Log a scalar variable."""
+        summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value)])
+        self.writer.add_summary(summary, step)
+
+    def list_of_scalars_summary(self, tag_value_pairs, step):
+        """Log scalar variables."""
+        summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value) for tag, value in tag_value_pairs])
+        self.writer.add_summary(summary, step)
