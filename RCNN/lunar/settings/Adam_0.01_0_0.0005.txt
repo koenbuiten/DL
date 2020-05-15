@@ -1,2 +1,0 @@
-,optimizer,lr,momentum,wd
-0,Adam,0.01,0,0.0005

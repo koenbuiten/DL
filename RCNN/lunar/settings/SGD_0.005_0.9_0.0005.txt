@@ -1,2 +1,0 @@
-,optimizer,lr,momentum,wd
-0,SGD,0.005,0.9,0.0005
