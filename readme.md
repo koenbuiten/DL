@@ -8,8 +8,6 @@
 - **stats_plot.py** makes plots for the loss and average precision data which is saved by **lunarRCNN.py** in the **stats** folder. When the program is ran, this will looks for the files in the **stats** folder and outputs the plots in the **figures** folder.
 
 # To make the program run
-Change the **lunar_loc** variable to the folder that contains the dataset.
-
 1. Open your python environment: python or python3 (in most cases)
 2. type **import utils** enter
 3. type **utils.create_only_rocks_dataset(lunar_loc)** enter, where **lunar_loc** is the path to the **artificial-lunar-rocky-landscape-dataset** folder, i.e. **utils.create_only_rocks_dataset('home/DL/Datasets/artificial-lunar-rocky-landscape-dataset')**
