@@ -363,28 +363,33 @@ def draw_masks(masks,ax,color):
 
 # Creates a new dataset, where all the images which do not include any rocks are removed.
 def create_only_rocks_dataset(data_loc):
-    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/ground"))))
+    if not os.path.exists(os.path.join(data_loc, "images/clean2")):
+        os.mkdir(os.path.join(data_loc, "images/clean2"))
+    if not os.path.exists(os.path.join(data_loc, "images/render2")):
+        os.mkdir(os.path.join(data_loc, "images/render2"))
+
+    mask_list = list(sorted(os.listdir(os.path.join(data_loc, "images/clean"))))
     imgs = []
     masks = []
 
     jdx = 1
     for idx in range(len(mask_list)):
-        mask_path = os.path.join(data_loc, "images/ground", mask_list[idx])
+        mask_path = os.path.join(data_loc, "images/clean", mask_list[idx])
         imgMask = Image.open(mask_path)
         mask = np.array(imgMask)
-        if mask_list[idx][6:10] != '0028': # Image is missing in the dataset
+        if mask_list[idx][5:9] != '0028': # Image is missing in the dataset
             if not isinstance((mask == [0, 255, 0]), bool):
                 if (True in (mask == [0, 255, 0])) or (True in (mask == [0, 0, 255])):
                     imageName = createName(str(jdx))
-                    imgMask.save(os.path.join(data_loc, "./images/ground2/ground" + imageName + ".png"))
+                    imgMask.save(os.path.join(data_loc, "images/clean2/clean" + imageName + ".png"))
                     masks.append(mask_list[idx])
-
-                    img_path = os.path.join(data_loc, "images/render/render" + mask_list[idx][6:10] + ".png")
+                    img_path = os.path.join(data_loc, "images/render/render" + mask_list[idx][5:9] + ".png")
                     image = Image.open(img_path)
-                    image.save(os.path.join(data_loc, "images/render3/render" + imageName + ".png"))
-                    imgs.append("render" + mask_list[idx][6:10] + ".png")
+                    image.save(os.path.join(data_loc, "images/render2/render" + imageName + ".png"))
+                    imgs.append("render" + mask_list[idx][5:9] + ".png")
 
                     jdx = jdx + 1
+
 
 # Saves given losses from the dict to a csv file with the indicated epoch as index
 def save_setting_to_file(settings):

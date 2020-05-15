@@ -34,10 +34,10 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 # The program uses a pre trained fast RCNN model from pytorch.
 
 # Koen's peregrine data location
-lunar_loc = '/data/s3861023/lunarDataset'
+# lunar_loc = '/data/s3861023/lunarDataset'
 
 # Koen's local data location
-# lunar_loc = '/media/koenbuiten/8675c03f-5bb1-4466-8581-8f042a79029b/koenbuiten/Datasets/artificial-lunar-rocky-landscape-dataset'
+lunar_loc = '/media/koenbuiten/8675c03f-5bb1-4466-8581-8f042a79029b/koenbuiten/Datasets/artificial-lunar-rocky-landscape-dataset'
 
 
 # This class load the dataset, this function is based on the pytorch tutorial on obejct detection: https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html
