@@ -1,5 +1,5 @@
 # Explanation of the various files
-- **lunarRCNN.py** is the main file, this file should be run with the name of a settings file as the first parameter, e.g.  "python lunarRCNN SGD_0.01_0.9_0.0001.txt". The **settings** folder contains several of these files for reference. The need for the settings file is to be able to run batch jobs on the peregrine hpc from the RUG. The program saves the model in the **models** folder, the evalation and loss statistics are put in the **stats** folder.
+- **lunarRCNN.py** is the main file, this file should be run with the name of a settings file as the first parameter, e.g.  "python lunarRCNN.py SGD_0.01_0.9_0.0001.txt". The **settings** folder contains several of these files for reference. The need for the settings file is to be able to run batch jobs on the peregrine hpc from the RUG. The program saves the model in the **models** folder, the evalation and loss statistics are put in the **stats** folder.
 - **evaluation.py** contains the functions to evaluate the model.
 - **utils.py** contains miscellaneous function which are used throughout the project.
 - **engine.py** contains the functions for pre-processing and training the model.
