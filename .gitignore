@@ -1,4 +1,4 @@
-RCNN/models/
-RCNN/.idea/
-RCNN/__pycache__
-RCNN/old_code_scratch_temp/
+models/
+.idea/
+__pycache__
+old_code_scratch_temp/
